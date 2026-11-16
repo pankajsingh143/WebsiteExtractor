@@ -1,0 +1,10 @@
+{
+  "actorSpecification": 1,
+  "name": "website-contact-extractor",
+  "title": "Website Contact & Business Information Extractor",
+  "description": "Extract publicly displayed business emails, phone numbers and social profile links from a website and a limited number of same-domain pages.",
+  "version": "0.1",
+  "buildTag": "latest",
+  "dockerfile": "./Dockerfile",
+  "inputSchema": "./input_schema.json"
+}

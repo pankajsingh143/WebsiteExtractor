@@ -1,0 +1,11 @@
+{
+  "startUrls": [
+    {
+      "url": "https://example.com"
+    }
+  ],
+  "maxPages": 10,
+  "requestTimeoutSecs": 20,
+  "respectRobotsTxt": true,
+  "userAgent": "WebsiteContactExtractor/1.0 (+https://apify.com)"
+}

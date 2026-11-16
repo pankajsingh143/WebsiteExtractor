@@ -1,0 +1,63 @@
+{
+  "title": "Website Contact Extractor input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrls": {
+      "title": "Website URLs",
+      "type": "array",
+      "description": "One or more website URLs you are authorized to crawl.",
+      "editor": "requestListSources",
+      "items": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "title": "URL",
+            "format": "uri"
+          }
+        }
+      },
+      "prefill": [
+        {
+          "url": "https://example.com"
+        }
+      ]
+    },
+    "maxPages": {
+      "title": "Maximum pages per website",
+      "type": "integer",
+      "description": "Includes the homepage. Keep this low and respect website policies.",
+      "editor": "number",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 30
+    },
+    "requestTimeoutSecs": {
+      "title": "Request timeout (seconds)",
+      "type": "integer",
+      "editor": "number",
+      "default": 20,
+      "minimum": 5,
+      "maximum": 60
+    },
+    "respectRobotsTxt": {
+      "title": "Respect robots.txt",
+      "type": "boolean",
+      "editor": "checkbox",
+      "default": true
+    },
+    "userAgent": {
+      "title": "User-Agent",
+      "type": "string",
+      "editor": "textfield",
+      "default": "WebsiteContactExtractor/1.0 (+https://apify.com)"
+    }
+  },
+  "required": [
+    "startUrls"
+  ]
+}
