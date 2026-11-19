@@ -1,0 +1,11 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "Website Contact Extractor Results",
+  "properties": {
+    "results": {
+      "type": "string",
+      "title": "Extracted Website Contacts",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    }
+  }
+}

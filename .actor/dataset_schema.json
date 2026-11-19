@@ -1,0 +1,146 @@
+{
+  "actorSpecification": 1,
+  "title": "Website Contact Extractor Dataset",
+  "description": "Extracted contact details from crawled website pages, plus a per-website summary.",
+  "fields": {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+      "recordType": {
+        "type": "string",
+        "title": "Record Type",
+        "description": "Identifies whether this record is a page result or a website summary.",
+        "example": "summary"
+      },
+      "startUrl": {
+        "type": "string",
+        "title": "Start URL",
+        "description": "The website URL provided as the crawl starting point."
+      },
+      "pageUrl": {
+        "type": "string",
+        "title": "Page URL",
+        "description": "The URL of the crawled page."
+      },
+      "statusCode": {
+        "type": "integer",
+        "title": "HTTP Status Code",
+        "description": "HTTP response status code returned for the page.",
+        "example": 200
+      },
+      "title": {
+        "type": "string",
+        "title": "Page Title",
+        "description": "Title extracted from the webpage."
+      },
+      "emails": {
+        "type": "array",
+        "title": "Emails",
+        "description": "Email addresses found on the page.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "phones": {
+        "type": "array",
+        "title": "Phone Numbers",
+        "description": "Phone numbers found on the page.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "socialLinks": {
+        "type": "array",
+        "title": "Social Links",
+        "description": "Social media profile URLs found on the page.",
+        "items": {
+          "type": "string"
+        }
+      },
+      "error": {
+        "type": [
+          "string",
+          "null"
+        ],
+        "title": "Error",
+        "description": "Error encountered while processing the page, if any."
+      },
+      "results": {
+        "type": "object",
+        "title": "Website Summary Results",
+        "description": "Summary statistics and deduplicated contacts grouped by starting website URL.",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "pagesCrawled": {
+              "type": "integer",
+              "title": "Pages Crawled"
+            },
+            "uniqueEmails": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "uniquePhones": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "uniqueSocialLinks": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "views": {
+    "overview": {
+      "title": "Crawl Results",
+      "transformation": {
+        "fields": [
+          "recordType",
+          "startUrl",
+          "pageUrl",
+          "statusCode",
+          "title",
+          "emails",
+          "phones",
+          "socialLinks",
+          "error",
+          "results"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "startUrl": {
+            "label": "Starting Website",
+            "format": "link"
+          },
+          "pageUrl": {
+            "label": "Crawled Page",
+            "format": "link"
+          },
+          "statusCode": {
+            "label": "HTTP Status"
+          },
+          "emails": {
+            "label": "Emails"
+          },
+          "phones": {
+            "label": "Phones"
+          },
+          "socialLinks": {
+            "label": "Social Profiles"
+          }
+        }
+      }
+    }
+  }
+}
