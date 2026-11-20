@@ -1,4 +1,5 @@
-"""Ollama implementation of the enrichment provider."""
+
+"""Generic OpenAI-compatible API implementation of the enrichment provider."""
 
 import json
 from urllib.request import Request, urlopen
@@ -6,61 +7,70 @@ from urllib.request import Request, urlopen
 from .base import EnrichmentProvider, EnrichmentRequest, EnrichmentResult
 
 
-class OllamaProvider(EnrichmentProvider):
-    """Enrich scraped website data using a local Ollama model."""
+class APIProvider(EnrichmentProvider):
+    """Enrich scraped website data using a configurable LLM API endpoint."""
 
     def __init__(
         self,
-        model: str = "qwen3.5:4b",
-        base_url: str = "http://localhost:11434",
-        timeout: float = 120.0,
+        api_url: str,
+        model: str,
+        api_key: str | None = None,
+        timeout: float = 60.0,
     ):
+        self.api_url = api_url.strip()
+        self.api_key = api_key
         self.model = model
-        self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
     @property
     def provider_name(self) -> str:
-        return "ollama"
+        return "api"
 
     def enrich(self, request: EnrichmentRequest) -> EnrichmentResult:
         prompt = self._build_prompt(request)
 
+        headers = {
+            "Content-Type": "application/json",
+        }
+
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
         payload = json.dumps(
             {
                 "model": self.model,
-                "stream": False,
-                "think": False,
-                "format": "json",
-                "options": {
-                    "temperature": 0,
-                    "num_predict": 512,
-                },
+                "temperature": 0,
+                "max_tokens": 512,
+                "response_format": {"type": "json_object"},
                 "messages": [
                     {
                         "role": "system",
                         "content": (
                             "You are a strict website data extraction engine. "
-                            "Use ONLY the supplied scraped content. Never invent, "
-                            "infer unsupported facts, browse, or use outside knowledge. "
-                            "Return null or empty arrays when evidence is insufficient. "
-                            "Return valid JSON only."
+                            "Use ONLY the supplied scraped evidence. Never browse, "
+                            "use outside knowledge, or invent information. "
+                            "Every enriched value must have a supporting evidence "
+                            "quote taken verbatim from the supplied text. "
+                            "Return null or empty arrays when evidence is "
+                            "insufficient. Return valid JSON only."
                         ),
                     },
                     {"role": "user", "content": prompt},
                 ],
             }
         ).encode("utf-8")
-        request = Request(
-            f"{self.base_url}/api/chat",
+
+        http_request = Request(
+            self.api_url,
             data=payload,
-            headers={"Content-Type": "application/json"},
+            headers=headers,
             method="POST",
         )
-        with urlopen(request, timeout=self.timeout) as response:
-            result = json.loads(response.read().decode("utf-8"))
 
-        content = result["message"]["content"]
+        with urlopen(http_request, timeout=self.timeout) as response:
+            api_result = json.loads(response.read().decode("utf-8"))
+
+        content = api_result["choices"][0]["message"]["content"]
         data = json.loads(content)
 
         return EnrichmentResult(
@@ -69,28 +79,36 @@ class OllamaProvider(EnrichmentProvider):
             industry=data.get("industry"),
             services=data.get("services", []),
             contact_roles=data.get("contactRoles", []),
+            evidence=data.get("evidence", {}),
         )
 
     @staticmethod
     def _build_prompt(request: EnrichmentRequest) -> str:
-        evidence = {
+        supplied_evidence = {
             "scraped_text": request.scraped_text,
             "extracted_emails": request.extracted_emails,
         }
 
         return f"""
-Extract business information from the supplied evidence.
+Extract business information using ONLY the supplied evidence.
 
 Rules:
-- Use only the supplied scraped text.
-- Business name must be explicitly present in the text.
-- Description must be a factual summary of the text.
+- Do not use external knowledge or assumptions.
+- Business name must be explicitly supported by the text.
+- Description must be a factual summary of the supplied text.
 - Industry must be explicitly supported; otherwise null.
-- Services must be explicitly mentioned.
+- Services must be explicitly mentioned in the text.
 - Classify only the supplied email addresses.
 - Never create, alter, or omit email addresses.
-- If email role is unclear, use "general".
+- If an email role is unclear, use "general".
 - Allowed email roles: sales, support, careers, general, partnerships, other.
+- Every non-null businessName, description, and industry must have a
+  supporting verbatim evidence quote.
+- Every service must have its own supporting evidence quote.
+- Every email role must have a supporting evidence quote.
+- Evidence quotes must be copied exactly from scraped_text.
+- If you cannot provide evidence for a field, return null or omit that field.
+- Do not explain or elaborate beyond the evidence.
 
 Return exactly this JSON structure:
 {{
@@ -100,9 +118,28 @@ Return exactly this JSON structure:
   "services": [],
   "contactRoles": [
     {{"email": "", "role": "general"}}
-  ] 
+  ],
+  "evidence": {{
+    "businessName": null,
+    "description": null,
+    "industry": null,
+    "services": [],
+    "contactRoles": {{}}
+  }}
 }}
 
-Evidence:
-{json.dumps(evidence, ensure_ascii=False)}
+Evidence requirements:
+- evidence.businessName: quote supporting businessName, or null.
+- evidence.description: quote supporting description, or null.
+- evidence.industry: quote supporting industry, or null.
+- evidence.services: array of quotes, in the same order as services.
+- evidence.contactRoles: map each email to a quote supporting its assigned role.
+
+Supplied evidence:
+{json.dumps(supplied_evidence, ensure_ascii=False)}
 """.strip()
+
+
+# Temporary compatibility alias.
+# Removed when the enrichment orchestrator is migrated to APIProvider.
+OllamaProvider = APIProvider

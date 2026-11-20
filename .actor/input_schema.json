@@ -36,12 +36,43 @@
       "minimum": 1,
       "maximum": 30
     },
-    "enableEnrichment": {
-      "title": "Enable AI enrichment",
-      "type": "boolean",
-      "description": "Use an AI provider to enrich extracted business information. Enrichment is optional and may require a configured provider.",
-      "editor": "checkbox",
-      "default": false
+   "enableEnrichment": {
+        "title": "Enable AI enrichment",
+        "type": "boolean",
+        "description": "Optional AI enrichment using your own OpenAI-compatible LLM endpoint. Disabled by default.",
+        "editor": "checkbox",
+        "default": false
+    },
+    "llmApiUrl": {
+        "title": "LLM API URL",
+        "type": "string",
+        "description": "Complete API endpoint URL, e.g. https://api.openai.com/v1/chat/completions. Required when AI enrichment is enabled.",
+        "editor": "textfield",
+        "default": ""
+    },
+    "llmApiKey": {
+        "title": "LLM API Key",
+        "type": "string",
+        "description": "Your LLM API key. Leave empty if your endpoint does not require authentication.",
+        "editor": "textfield",
+        "isSecret": true,
+        "default": ""
+    },
+    "llmModel": {
+        "title": "LLM Model",
+        "type": "string",
+        "description": "Model identifier accepted by your endpoint. Required when AI enrichment is enabled.",
+        "editor": "textfield",
+        "default": ""
+    },
+    "llmTimeoutSecs": {
+        "title": "LLM Request Timeout (seconds)",
+        "type": "integer",
+        "description": "Maximum time to wait for an LLM response.",
+        "editor": "number",
+        "default": 60,
+        "minimum": 10,
+        "maximum": 300
     },
     "requestTimeoutSecs": {
       "title": "Request timeout (seconds)",

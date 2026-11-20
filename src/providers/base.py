@@ -21,6 +21,7 @@ class EnrichmentResult:
     industry: str | None = None
     services: list[str] = field(default_factory=list)
     contact_roles: list[dict[str, str]] = field(default_factory=list)
+    evidence: dict = field(default_factory=dict)
 
 
 class EnrichmentProvider(ABC):

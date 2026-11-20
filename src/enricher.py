@@ -2,11 +2,13 @@
 
 import logging
 import os
-from unittest import result
-from urllib import request
 
-from src.providers.base import EnrichmentProvider, EnrichmentRequest, EnrichmentResult
-from src.providers.ollama import OllamaProvider
+from src.providers.base import (
+    EnrichmentProvider,
+    EnrichmentRequest,
+    EnrichmentResult,
+)
+from src.providers.ollama import APIProvider
 from src.enrichment_validator import validate_enrichment
 
 logger = logging.getLogger(__name__)
@@ -20,16 +22,13 @@ class Enricher:
 
     @staticmethod
     def _create_provider() -> EnrichmentProvider:
-        provider_name = os.getenv("ENRICHMENT_PROVIDER", "ollama").lower()
+        return APIProvider(
+            api_url=os.getenv("ENRICHMENT_API_URL", ""),
+            model=os.getenv("ENRICHMENT_MODEL", ""),
+            api_key=os.getenv("ENRICHMENT_API_KEY") or None,
+            timeout=float(os.getenv("ENRICHMENT_TIMEOUT", "60")),
+        )
 
-        if provider_name == "ollama":
-            return OllamaProvider(
-                model=os.getenv("OLLAMA_MODEL", "qwen3.5:4b"),
-                base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-            )
-
-        raise ValueError(f"Unsupported enrichment provider: {provider_name}")
-    
     @staticmethod
     def is_enabled() -> bool:
         """Return whether LLM enrichment is explicitly enabled."""
@@ -41,8 +40,10 @@ class Enricher:
 
     def enrich(self, request: EnrichmentRequest) -> EnrichmentResult:
         """Run enrichment with safe fallback if the provider fails."""
+
         if not self.is_enabled():
             return EnrichmentResult()
+
         try:
             result = self.provider.enrich(request)
             return validate_enrichment(result, request)

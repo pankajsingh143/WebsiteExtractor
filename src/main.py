@@ -4,6 +4,7 @@ import ipaddress
 import socket
 from urllib.parse import urlparse, urljoin
 from urllib.robotparser import RobotFileParser
+from bs4 import BeautifulSoup
 
 import httpx
 from apify import Actor
@@ -111,6 +112,7 @@ async def main():
                 queue = [start_url]
                 visited = set()
                 aggregate = {"emails": set(), "phones": set(), "socialLinks": set()}
+                scraped_text_parts = []
                 pages_done = 0
 
                 while queue and pages_done < max_pages:
@@ -152,6 +154,18 @@ async def main():
                             continue
 
                         result = extract_contacts(response.text, str(response.url))
+
+                        # Collect limited textual evidence for optional AI enrichment.
+                        soup = BeautifulSoup(response.text, "html.parser")
+
+                        for element in soup(["script", "style", "noscript", "svg"]):
+                            element.decompose()
+
+                        page_text = soup.get_text(" ", strip=True)
+
+                        if page_text:
+                            scraped_text_parts.append(page_text[:8000])
+
                         pages_done += 1
                         for key in aggregate:
                             aggregate[key].update(result[key])

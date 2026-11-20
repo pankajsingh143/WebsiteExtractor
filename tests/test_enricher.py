@@ -1,3 +1,4 @@
+
 from src.enricher import Enricher
 from src.providers.base import EnrichmentRequest, EnrichmentResult, EnrichmentProvider
 
@@ -10,13 +11,20 @@ class MockProvider(EnrichmentProvider):
     def enrich(self, request: EnrichmentRequest) -> EnrichmentResult:
         return EnrichmentResult(
             business_name="Example Company",
-            description="Example business description",
-            industry="Technology",
-            services=["Consulting"],
+            description="Example Company provides consulting.",
+            industry=None,
+            services=["consulting"],
             contact_roles=[
                 {"email": email, "role": "general"}
                 for email in request.extracted_emails
             ],
+            evidence={
+                "businessName": "Example Company",
+                "description": "Example Company provides consulting.",
+                "industry": None,
+                "services": ["consulting"],
+                "contactRoles": {},
+            },
         )
 
 
@@ -42,7 +50,7 @@ def test_enricher_uses_injected_provider(monkeypatch):
     result = enricher.enrich(request)
 
     assert result.business_name == "Example Company"
-    assert result.services == ["Consulting"]
+    assert result.services == ["consulting"]
     assert result.contact_roles == [
         {"email": "info@example.com", "role": "general"}
     ]
@@ -68,6 +76,7 @@ def test_enricher_fallback_preserves_extracted_emails(monkeypatch):
         {"email": "sales@example.com", "role": "general"},
         {"email": "support@example.com", "role": "general"},
     ]
+
 
 def test_enrichment_disabled_does_not_call_provider(monkeypatch):
     monkeypatch.setenv("ENRICHMENT_ENABLED", "false")
