@@ -36,6 +36,13 @@
       "minimum": 1,
       "maximum": 30
     },
+    "enableEnrichment": {
+      "title": "Enable AI enrichment",
+      "type": "boolean",
+      "description": "Use an AI provider to enrich extracted business information. Enrichment is optional and may require a configured provider.",
+      "editor": "checkbox",
+      "default": false
+    },
     "requestTimeoutSecs": {
       "title": "Request timeout (seconds)",
       "type": "integer",
