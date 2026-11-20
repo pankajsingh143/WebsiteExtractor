@@ -5,6 +5,8 @@ import socket
 from urllib.parse import urlparse, urljoin
 from urllib.robotparser import RobotFileParser
 from bs4 import BeautifulSoup
+from src.enricher import Enricher
+from src.providers.base import EnrichmentRequest
 
 import httpx
 from apify import Actor
@@ -59,8 +61,6 @@ async def main():
         Actor.log.info("Actor started; checking local input")
         actor_input = await Actor.get_input()
 
-        Actor.log.info("Loaded actor input: %s", actor_input)
-
         actor_input = actor_input or {}
         start_urls = actor_input.get("startUrls") or []
 
@@ -69,6 +69,11 @@ async def main():
         max_pages = max(1, min(int(actor_input.get("maxPages", 10)), 30))
         timeout = max(5, min(int(actor_input.get("requestTimeoutSecs", 20)), 60))
         respect_robots = actor_input.get("respectRobotsTxt", True)
+        enable_enrichment = actor_input.get("enableEnrichment", False)
+        llm_api_url = actor_input.get("llmApiUrl", "")
+        llm_api_key = actor_input.get("llmApiKey")
+        llm_model = actor_input.get("llmModel", "")
+        llm_timeout = actor_input.get("llmTimeoutSecs", 60)
         user_agent = actor_input.get(
             "userAgent",
             "WebsiteContactExtractor/1.0 (+https://apify.com)"
@@ -194,6 +199,31 @@ async def main():
 
                     # Be polite: low request rate, sequential crawling.
                     await asyncio.sleep(0.5)
+                    enrichment_data = None
+
+                if enable_enrichment:
+                    try:
+                        enricher = Enricher(
+                            enabled=True,
+                            api_url=llm_api_url,
+                            api_key=llm_api_key,
+                            model=llm_model,
+                            timeout=llm_timeout,
+                        )
+
+                        enrichment_data = enricher.enrich(
+                            EnrichmentRequest(
+                                scraped_text="\n".join(scraped_text_parts)[:20000],
+                                extracted_emails=sorted(aggregate["emails"]),
+                            )
+                        )
+
+                    except Exception as exc:
+                        Actor.log.warning(
+                            "AI enrichment setup failed for %s: %s",
+                            start_url,
+                            exc,
+                        )
 
                 summary[start_url] = {
                     "pagesCrawled": pages_done,
@@ -201,6 +231,11 @@ async def main():
                     "uniquePhones": sorted(aggregate["phones"]),
                     "uniqueSocialLinks": sorted(aggregate["socialLinks"]),
                 }
+
+                if enable_enrichment:
+                    summary[start_url]["enrichment"] = (
+                        enrichment_data.__dict__ if enrichment_data else None
+                    )
 
         await Actor.push_data({
             "recordType": "summary",

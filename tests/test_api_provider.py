@@ -1,7 +1,10 @@
 
 import json
+import pytest
 
-from src.providers.ollama import APIProvider
+
+from urllib.error import HTTPError
+from src.providers.api_provider import APIProvider
 from src.providers.base import EnrichmentRequest
 
 
@@ -56,7 +59,18 @@ def test_api_provider_sends_config_and_parses_response(monkeypatch):
         captured["timeout"] = timeout
         return MockResponse(mock_response_data)
 
-    monkeypatch.setattr("src.providers.ollama.urlopen", mock_urlopen)
+    class MockOpener:
+        def open(self, http_request, timeout):
+            return mock_urlopen(http_request, timeout)
+
+
+    def mock_build_opener(*handlers):
+        return MockOpener()
+
+    monkeypatch.setattr(
+        "src.providers.api_provider.build_opener",
+        mock_build_opener,
+    )
 
     provider = APIProvider(
         api_url="https://llm.example.com/v1/chat/completions",
@@ -113,7 +127,15 @@ def test_api_provider_works_without_api_key(monkeypatch):
         captured["headers"] = dict(http_request.header_items())
         return MockResponse(mock_response_data)
 
-    monkeypatch.setattr("src.providers.ollama.urlopen", mock_urlopen)
+    class MockOpener:
+        def open(self, http_request, timeout):
+            return mock_urlopen(http_request, timeout)
+
+
+    def mock_build_opener(*handlers):
+        return MockOpener()
+
+    monkeypatch.setattr("src.providers.api_provider.build_opener", mock_build_opener)
 
     provider = APIProvider(
         api_url="http://localhost:1234/v1/chat/completions",
@@ -128,3 +150,36 @@ def test_api_provider_works_without_api_key(monkeypatch):
     )
 
     assert "Authorization" not in captured["headers"]
+
+
+def test_api_provider_rejects_redirects(monkeypatch):
+    def mock_build_opener(*handlers):
+        class MockOpener:
+            def open(self, http_request, timeout):
+                raise HTTPError(
+                    http_request.full_url,
+                    302,
+                    "Found",
+                    {},
+                    None,
+                )
+
+        return MockOpener()
+
+    monkeypatch.setattr(
+        "src.providers.api_provider.build_opener",
+        mock_build_opener,
+    )
+
+    provider = APIProvider(
+        api_url="https://llm.example.com/v1/chat/completions",
+        model="test-model",
+    )
+
+    request = EnrichmentRequest(
+        scraped_text="Example evidence",
+        extracted_emails=[],
+    )
+
+    with pytest.raises(ValueError, match="redirects are not allowed"):
+        provider.enrich(request)

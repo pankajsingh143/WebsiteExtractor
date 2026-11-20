@@ -2,11 +2,18 @@
 """Generic OpenAI-compatible API implementation of the enrichment provider."""
 
 import json
-from urllib.request import Request, urlopen
+from urllib.request import Request, HTTPRedirectHandler, build_opener, urlopen
+from urllib.parse import urlparse
+from urllib.error import HTTPError
 
 from .base import EnrichmentProvider, EnrichmentRequest, EnrichmentResult
 
 
+
+class NoRedirectHandler(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+    
 class APIProvider(EnrichmentProvider):
     """Enrich scraped website data using a configurable LLM API endpoint."""
 
@@ -19,6 +26,17 @@ class APIProvider(EnrichmentProvider):
     ):
         self.api_url = api_url.strip()
         self.api_key = api_key
+        parsed_url = urlparse(self.api_url)
+
+        if parsed_url.scheme not in {"http", "https"}:
+            raise ValueError("API URL must use HTTP or HTTPS.")
+
+        if not parsed_url.hostname:
+            raise ValueError("API URL must contain a valid hostname.")
+
+        if parsed_url.username or parsed_url.password:
+            raise ValueError("API URL must not contain embedded credentials.")
+            self.api_key = api_key
         self.model = model
         self.timeout = timeout
 
@@ -67,8 +85,15 @@ class APIProvider(EnrichmentProvider):
             method="POST",
         )
 
-        with urlopen(http_request, timeout=self.timeout) as response:
-            api_result = json.loads(response.read().decode("utf-8"))
+        opener = build_opener(NoRedirectHandler())
+
+        try:
+            with opener.open(http_request, timeout=self.timeout) as response:
+                api_result = json.loads(response.read().decode("utf-8"))
+        except HTTPError as exc:
+            if exc.code in {301, 302, 303, 307, 308}:
+                raise ValueError("API endpoint redirects are not allowed.") from exc
+            raise
 
         content = api_result["choices"][0]["message"]["content"]
         data = json.loads(content)

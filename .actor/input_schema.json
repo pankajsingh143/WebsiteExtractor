@@ -47,23 +47,20 @@
         "title": "LLM API URL",
         "type": "string",
         "description": "Complete API endpoint URL, e.g. https://api.openai.com/v1/chat/completions. Required when AI enrichment is enabled.",
-        "editor": "textfield",
-        "default": ""
+        "editor": "textfield"
     },
     "llmApiKey": {
         "title": "LLM API Key",
         "type": "string",
         "description": "Your LLM API key. Leave empty if your endpoint does not require authentication.",
         "editor": "textfield",
-        "isSecret": true,
-        "default": ""
+        "isSecret": true
     },
     "llmModel": {
         "title": "LLM Model",
         "type": "string",
         "description": "Model identifier accepted by your endpoint. Required when AI enrichment is enabled.",
-        "editor": "textfield",
-        "default": ""
+        "editor": "textfield"
     },
     "llmTimeoutSecs": {
         "title": "LLM Request Timeout (seconds)",

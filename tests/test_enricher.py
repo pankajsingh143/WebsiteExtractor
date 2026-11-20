@@ -40,7 +40,7 @@ class FailingProvider(EnrichmentProvider):
 def test_enricher_uses_injected_provider(monkeypatch):
     monkeypatch.setenv("ENRICHMENT_ENABLED", "true")
     provider = MockProvider()
-    enricher = Enricher(provider=provider)
+    enricher = Enricher(enabled=True, provider=provider)
 
     request = EnrichmentRequest(
         scraped_text="Example Company provides consulting.",
@@ -59,7 +59,7 @@ def test_enricher_uses_injected_provider(monkeypatch):
 def test_enricher_fallback_preserves_extracted_emails(monkeypatch):
     monkeypatch.setenv("ENRICHMENT_ENABLED", "true")
     provider = FailingProvider()
-    enricher = Enricher(provider=provider)
+    enricher = Enricher(enabled=True, provider=provider)
 
     request = EnrichmentRequest(
         scraped_text="Some scraped content",
@@ -82,7 +82,7 @@ def test_enrichment_disabled_does_not_call_provider(monkeypatch):
     monkeypatch.setenv("ENRICHMENT_ENABLED", "false")
 
     provider = MockProvider()
-    enricher = Enricher(provider=provider)
+    enricher = Enricher(enabled=False, provider=provider)
 
     request = EnrichmentRequest(
         scraped_text="Example Company provides consulting.",
@@ -94,5 +94,27 @@ def test_enrichment_disabled_does_not_call_provider(monkeypatch):
     assert result.business_name is None
     assert result.description is None
     assert result.industry is None
+    assert result.services == []
+    assert result.contact_roles == []
+
+def test_disabled_enrichment_does_not_construct_provider(monkeypatch):
+    def fail_if_constructed(*args, **kwargs):
+        raise AssertionError("Provider must not be constructed when enrichment is disabled")
+
+    monkeypatch.setattr(
+        "src.enricher.APIProvider",
+        fail_if_constructed,
+    )
+
+    enricher = Enricher(enabled=False)
+
+    result = enricher.enrich(
+        EnrichmentRequest(
+            scraped_text="Example text",
+            extracted_emails=["info@example.com"],
+        )
+    )
+
+    assert result.business_name is None
     assert result.services == []
     assert result.contact_roles == []
