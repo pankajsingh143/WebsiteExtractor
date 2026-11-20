@@ -1,168 +1,145 @@
 # Website Contact & Business Information Extractor
 
-A deterministic Apify Actor that crawls a website's homepage and a small set of same-domain pages to extract publicly displayed business contact information such as:
+Find publicly available contact information on websites—without manually checking every page.
 
-- email addresses
-- phone numbers
-- social profile URLs (LinkedIn, Facebook, Instagram, X/Twitter, YouTube)
+**Website Contact & Business Information Extractor** crawls a website and its relevant internal pages to discover publicly listed email addresses, phone numbers, and social media profiles.
 
-The project uses HTML parsing and regex-based validation rather than an LLM or external API, so it runs without API keys and remains fast and transparent.
+Enter a website URL, choose your crawl limit, and let the Actor do the work.
 
-## Why this project exists
+---
 
-This Actor is designed to help with legitimate business research and contact-discovery workflows where the target website explicitly publishes contact details. It is intentionally narrow: it only follows same-domain links, prioritizes likely contact pages, and extracts information that is already visible in public web content.
+## What can it find?
 
-## Important usage boundaries
+- 📧 **Email addresses** – emails publicly displayed on the website
+- 📞 **Phone numbers** – phone numbers found in page content and contact links
+- 🌐 **Social media profiles** – links to LinkedIn, Facebook, Instagram, X/Twitter, YouTube, and other supported social platforms
+- 📄 **Website pages** – the pages visited and their extraction results
 
-Use this tool only on websites you are authorized to access and operate within the site's terms, robots.txt rules, and applicable privacy/data-protection laws. This project is not intended for mass harvesting of personal information.
+All discovered contacts are collected from publicly accessible website content.
 
-Built-in safeguards include:
+## How to use
 
-- rejecting private, loopback and non-public IP destinations
-- blocking redirect chains that resolve to disallowed destinations
-- honoring `robots.txt` when enabled
-- limiting total pages crawled to a conservative cap
-- refusing to bypass logins, CAPTCHAs, paywalls or access controls
+### 1. Enter a website
 
-## How it works
+Add the website you want to explore in the **Start URLs** field.
 
-The implementation is split into two core pieces:
+For example:
 
-- `src/main.py` handles actor input, crawl loop, request safety checks, robots.txt enforcement, redirect handling, and dataset output.
-- `src/extractor.py` extracts contact data from HTML, normalizes URLs, looks for visible social links, and ranks same-domain links for follow-up crawling.
+`https://example.com`
 
-The crawler:
+### 2. Choose your crawl limit
 
-1. validates the starting URL and rejects unsafe destinations
-2. checks robots.txt if enabled
-3. fetches the page with a small timeout and redirect cap
-4. parses visible text and anchor tags for contact details
-5. records the page as a dataset item
-6. follows prioritized same-domain links until the page limit is reached
-7. pushes a final summary with deduplicated results
+Specify how many pages the Actor can visit for each starting website.
 
-## Project structure
+- **Max pages:** Limits the number of pages crawled per website.
+- **Request timeout:** Controls how long the Actor waits for a page to respond.
+- **Respect robots.txt:** Allows the Actor to respect website crawling rules.
 
-```text
-.
-├── .actor/
-│   ├── INPUT.example.json
-│   └── actor.json
-├── src/
-│   ├── __init__.py
-│   ├── __main__.py
-│   ├── extractor.py
-│   └── main.py
-├── Dockerfile
-├── README.md
-├── requirements.txt
-└── .gitignore
-```
+If you're trying it for the first time, start with a small page limit.
 
-## Requirements
+### 3. Run the Actor
 
-- Python 3.11+
-- Docker (for containerized Apify deployment)
-- Access to a website you're allowed to crawl
+Click **Start** and the Actor will visit the starting page and prioritize relevant internal pages, such as contact, about, and other pages that may contain contact information.
 
-## Local development
+### 4. Explore your results
 
-Create and activate a virtual environment, install dependencies, and run the actor locally:
+Review the results in the Apify Dataset. You can see the information found on individual pages as well as a consolidated summary of unique contacts for each website.
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python -m src
-```
+---
 
-For local execution, create a runtime input file at `storage/key_value_stores/default/INPUT.json` using the example in `.actor/INPUT.example.json`.
+## What you'll get
 
-## Input schema
+Results are organized to make them easy to review and use.
 
-Example payload:
+### Contact information
 
-```json
-{
-  "startUrls": [{"url": "https://example.com"}],
-  "maxPages": 10,
-  "requestTimeoutSecs": 20,
-  "respectRobotsTxt": true,
-  "userAgent": "WebsiteContactExtractor/1.0 (+https://apify.com)"
-}
-```
+| Field | Description |
+|---|---|
+| Emails | Email addresses discovered on the website |
+| Phones | Phone numbers found during crawling |
+| Social links | Social media profile URLs |
 
-Supported fields:
+### Website information
 
-- `startUrls`: array of objects with a `url` value; required
-- `maxPages`: maximum number of pages to crawl per starting URL (bounded by the actor logic, default 10)
-- `requestTimeoutSecs`: per-request timeout in seconds
-- `respectRobotsTxt`: whether to honor robots.txt for same-domain navigation
-- `userAgent`: custom HTTP user agent header
+| Field | Description |
+|---|---|
+| Website URL | Original website submitted |
+| Page URL | Specific page where information was found |
+| Page title | Title of the visited page |
+| Status code | HTTP response status |
+| Error | Any error encountered while processing the page |
 
-## Output format
+### Consolidated summary
 
-Each page fetch produces a dataset item like this:
+At the end of the crawl, the Actor also provides a summary for each website containing:
 
-```json
-{
-  "startUrl": "https://example.com",
-  "pageUrl": "https://example.com/contact",
-  "emails": ["info@example.com"],
-  "phones": ["+1 555 123 4567"],
-  "socialLinks": ["https://www.linkedin.com/company/example"],
-  "statusCode": 200,
-  "title": "Contact us",
-  "error": null
-}
-```
+- Total pages crawled
+- Unique email addresses
+- Unique phone numbers
+- Unique social profile links
 
-At the end of the run, the actor also pushes a summary object that contains deduplicated contact data across all crawled pages:
+Duplicates are removed from the consolidated contact summary.
 
-```json
-{
-  "recordType": "summary",
-  "results": {
-    "https://example.com": {
-      "pagesCrawled": 4,
-      "uniqueEmails": ["info@example.com"],
-      "uniquePhones": ["+1 555 123 4567"],
-      "uniqueSocialLinks": ["https://www.linkedin.com/company/example"]
-    }
-  }
-}
-```
+---
 
-## Deployment
+## Who can use it?
 
-### Apify
+**Sales & Business Development**
 
-1. Install the Apify CLI:
-   ```bash
-   npm install -g apify-cli
-   ```
-2. Log in:
-   ```bash
-   apify login
-   ```
-3. From this project directory, push the actor:
-   ```bash
-   apify push
-   ```
-4. Set the input in the Apify Console and run a test against a site you control or are authorized to crawl.
-5. Review dataset output and logs before publishing.
+Discover publicly listed contact information when researching prospective businesses.
 
-The project includes a Dockerfile and actor metadata compatible with Apify Python actors.
+**Marketing Professionals**
 
-## Production notes
+Collect website contact details to support research and outreach planning.
 
-Before using this in production or publishing it publicly, consider:
+**Small Businesses & Freelancers**
 
-- validating against a range of allowed websites
-- checking false positives such as `mailto:` and `tel:` links or generic text matches
-- reviewing international phone parsing and duplicate URL handling
-- keeping crawl limits conservative
-- adding clear privacy and data-handling disclosures if distributing the actor
-- confirming that pricing and storage costs are acceptable for your deployment model
+Find contact information on websites without manually navigating multiple pages.
 
-This project intentionally favors accuracy, safety, and legal compliance over broad crawling and aggressive extraction.
+**Researchers**
+
+Gather publicly available contact information as part of website and business research.
+
+**Recruiters**
+
+Explore company websites to locate publicly listed contact channels.
+
+---
+
+## Simple, lightweight & transparent
+
+- No API key required for the extraction process
+- No AI-generated contact information
+- Extracts information from website content rather than inventing contacts
+- Crawls internal pages of the same website
+- Prioritizes relevant pages for contact discovery
+- Consolidates duplicate contacts in the final summary
+- Uses crawl limits to help control execution
+
+---
+
+## Important limitations
+
+- The Actor can only find information that is publicly accessible and present on the pages it visits.
+- Not every website publishes email addresses or phone numbers.
+- Some websites may block automated requests or limit access.
+- Email addresses and phone numbers are **not independently verified** for accuracy or active status.
+- The Actor does not guarantee that all contacts on a website will be discovered.
+- It does not bypass authentication, CAPTCHAs, paywalls, or other access restrictions.
+- Results depend on website structure, content, accessibility, and the configured page limit.
+
+---
+
+## Responsible use
+
+Use this Actor responsibly and only on websites you are authorized to access.
+
+Respect website terms of service, robots.txt instructions, applicable privacy laws, and data-protection requirements. Contact information should be used for legitimate purposes. This Actor is not intended for indiscriminate harvesting of personal information or spam.
+
+---
+
+## Get started
+
+Enter a website URL, set your page limit, and start discovering publicly available business contact information.
+
+**Less manual browsing. More organized contact research.**
