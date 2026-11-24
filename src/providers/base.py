@@ -6,11 +6,9 @@ from dataclasses import dataclass, field
 
 @dataclass
 class EnrichmentRequest:
-    """Evidence collected by the Python scraper."""
-
-    scraped_text: str
+    """Minimal input for contact enrichment."""
+    website_url: str
     extracted_emails: list[str] = field(default_factory=list)
-
 
 @dataclass
 class EnrichmentResult:

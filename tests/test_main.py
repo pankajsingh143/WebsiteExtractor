@@ -166,3 +166,83 @@ def test_main_runs_enrichment_when_enabled(monkeypatch):
     assert website_summary["uniqueEmails"] == ["info@example.com"]
     assert "enrichment" in website_summary
     assert website_summary["enrichment"] is not None
+
+
+def test_main_blocks_external_redirect_and_records_it(monkeypatch):
+    pushed_data = []
+    requested_urls = []
+
+    actor_input = {
+        "startUrls": [{"url": "https://example.com"}],
+        "maxPages": 1,
+        "respectRobotsTxt": False,
+        "enableEnrichment": False,
+    }
+
+    class FakeActor:
+        log = main.Actor.log
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_value, traceback):
+            return False
+
+        @staticmethod
+        async def get_input():
+            return actor_input
+
+        @staticmethod
+        async def push_data(data):
+            pushed_data.append(data)
+
+    class FakeResponse:
+        status_code = 301
+        url = "https://example.com/"
+        text = ""
+        headers = {
+            "location": "https://example.org/",
+        }
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc_value, traceback):
+            return False
+
+        async def get(self, url):
+            requested_urls.append(url)
+            return FakeResponse()
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("External redirect must not be followed")
+
+    monkeypatch.setattr(main, "Actor", FakeActor())
+    monkeypatch.setattr(
+        main.httpx, "AsyncClient", lambda **kwargs: FakeClient()
+    )
+    monkeypatch.setattr(main, "validate_public_host", lambda url: None)
+    monkeypatch.setattr(main, "extract_contacts", fail_if_called)
+
+    asyncio.run(main.main())
+
+    blocked_records = [
+        record for record in pushed_data
+        if record.get("error") == "External redirect blocked"
+    ]
+
+    assert len(blocked_records) == 1
+
+    blocked_record = blocked_records[0]
+
+    assert blocked_record["startUrl"] == "https://example.com"
+    assert blocked_record["pageUrl"] == "https://example.com"
+    assert blocked_record["statusCode"] == 301
+    assert blocked_record["redirectUrl"] == "https://example.org/"
+    assert blocked_record["emails"] == []
+    assert blocked_record["phones"] == []
+    assert blocked_record["socialLinks"] == []
+
+    # Only the original URL should be requested.
+    assert requested_urls == ["https://example.com"]

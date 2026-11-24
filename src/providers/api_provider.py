@@ -13,7 +13,8 @@ from .base import EnrichmentProvider, EnrichmentRequest, EnrichmentResult
 class NoRedirectHandler(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
-    
+
+
 class APIProvider(EnrichmentProvider):
     """Enrich scraped website data using a configurable LLM API endpoint."""
 
@@ -60,17 +61,18 @@ class APIProvider(EnrichmentProvider):
                 "temperature": 0,
                 "max_tokens": 512,
                 "response_format": {"type": "json_object"},
+                "reasoning_effort": "none",
                 "messages": [
                     {
                         "role": "system",
                         "content": (
-                            "You are a strict website data extraction engine. "
-                            "Use ONLY the supplied scraped evidence. Never browse, "
-                            "use outside knowledge, or invent information. "
-                            "Every enriched value must have a supporting evidence "
-                            "quote taken verbatim from the supplied text. "
-                            "Return null or empty arrays when evidence is "
-                            "insufficient. Return valid JSON only."
+                            "You classify contact email roles. "
+                            "Use only the supplied website URL and email addresses. "
+                            "Never browse or use external knowledge. "
+                            "Preserve every supplied email exactly and return exactly "
+                            "one classification per supplied email. "
+                            "Return valid JSON only."
+
                         ),
                     },
                     {"role": "user", "content": prompt},
@@ -99,71 +101,51 @@ class APIProvider(EnrichmentProvider):
         data = json.loads(content)
 
         return EnrichmentResult(
-            business_name=data.get("businessName"),
-            description=data.get("description"),
-            industry=data.get("industry"),
-            services=data.get("services", []),
             contact_roles=data.get("contactRoles", []),
-            evidence=data.get("evidence", {}),
         )
 
     @staticmethod
     def _build_prompt(request: EnrichmentRequest) -> str:
-        supplied_evidence = {
-            "scraped_text": request.scraped_text,
+        supplied_data = {
+            "website_url": request.website_url,
             "extracted_emails": request.extracted_emails,
         }
 
         return f"""
-Extract business information using ONLY the supplied evidence.
+    Classify the role of each supplied email address.
 
-Rules:
-- Do not use external knowledge or assumptions.
-- Business name must be explicitly supported by the text.
-- Description must be a factual summary of the supplied text.
-- Industry must be explicitly supported; otherwise null.
-- Services must be explicitly mentioned in the text.
-- Classify only the supplied email addresses.
-- Never create, alter, or omit email addresses.
-- If an email role is unclear, use "general".
-- Allowed email roles: sales, support, careers, general, partnerships, other.
-- Every non-null businessName, description, and industry must have a
-  supporting verbatim evidence quote.
-- Every service must have its own supporting evidence quote.
-- Every email role must have a supporting evidence quote.
-- Evidence quotes must be copied exactly from scraped_text.
-- If you cannot provide evidence for a field, return null or omit that field.
-- Do not explain or elaborate beyond the evidence.
+    Use the website URL and email address patterns as context.
+    Do not browse or use external knowledge.
 
-Return exactly this JSON structure:
-{{
-  "businessName": null,
-  "description": null,
-  "industry": null,
-  "services": [],
-  "contactRoles": [
-    {{"email": "", "role": "general"}}
-  ],
-  "evidence": {{
-    "businessName": null,
-    "description": null,
-    "industry": null,
-    "services": [],
-    "contactRoles": {{}}
-  }}
-}}
+    Rules:
+    - Classify only the supplied email addresses.
+    - Never create, modify, or omit email addresses.
+    - Use the email address and website URL to infer the most likely role.
+    - If the role is ambiguous, use "general".
+    - Return only the allowed role values.
 
-Evidence requirements:
-- evidence.businessName: quote supporting businessName, or null.
-- evidence.description: quote supporting description, or null.
-- evidence.industry: quote supporting industry, or null.
-- evidence.services: array of quotes, in the same order as services.
-- evidence.contactRoles: map each email to a quote supporting its assigned role.
+    Allowed roles:
+    sales, support, careers, general, partnerships, other
 
-Supplied evidence:
-{json.dumps(supplied_evidence, ensure_ascii=False)}
-""".strip()
+    Classification hints:
+    - sales, business development, commercial -> sales
+    - support, help, service desk -> support
+    - careers, jobs, recruitment, hr -> careers
+    - partner, alliances -> partnerships
+    - info, contact, admin, office or unclear -> general
+    - Other clearly identifiable functions -> other
 
+    Return valid JSON only, using exactly this structure:
+
+    {{
+    "contactRoles": [
+        {{"email": "example@example.com", "role": "general"}}
+    ]
+    }}
+
+    Input:
+    {json.dumps(supplied_data, ensure_ascii=False)}
+    """
 
 # Temporary compatibility alias.
 # Removed when the enrichment orchestrator is migrated to APIProvider.

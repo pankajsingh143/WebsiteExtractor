@@ -43,14 +43,14 @@ def test_enricher_uses_injected_provider(monkeypatch):
     enricher = Enricher(enabled=True, provider=provider)
 
     request = EnrichmentRequest(
-        scraped_text="Example Company provides consulting.",
+        website_url="https://example.com",
         extracted_emails=["info@example.com"],
     )
 
     result = enricher.enrich(request)
 
-    assert result.business_name == "Example Company"
-    assert result.services == ["consulting"]
+    assert result.business_name is None
+    assert result.services == []
     assert result.contact_roles == [
         {"email": "info@example.com", "role": "general"}
     ]
@@ -62,7 +62,7 @@ def test_enricher_fallback_preserves_extracted_emails(monkeypatch):
     enricher = Enricher(enabled=True, provider=provider)
 
     request = EnrichmentRequest(
-        scraped_text="Some scraped content",
+        website_url="https://example.com",
         extracted_emails=["sales@example.com", "support@example.com"],
     )
 
@@ -85,7 +85,7 @@ def test_enrichment_disabled_does_not_call_provider(monkeypatch):
     enricher = Enricher(enabled=False, provider=provider)
 
     request = EnrichmentRequest(
-        scraped_text="Example Company provides consulting.",
+        website_url="https://example.com",
         extracted_emails=["info@example.com"],
     )
 
@@ -110,7 +110,7 @@ def test_disabled_enrichment_does_not_construct_provider(monkeypatch):
 
     result = enricher.enrich(
         EnrichmentRequest(
-            scraped_text="Example text",
+            website_url="https://example.com",
             extracted_emails=["info@example.com"],
         )
     )

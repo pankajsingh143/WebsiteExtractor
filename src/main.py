@@ -4,14 +4,18 @@ import ipaddress
 import socket
 from urllib.parse import urlparse, urljoin
 from urllib.robotparser import RobotFileParser
-from bs4 import BeautifulSoup
 from src.enricher import Enricher
 from src.providers.base import EnrichmentRequest
 
 import httpx
 from apify import Actor
 
-from src.extractor import extract_contacts, prioritize_links, normalize_url
+from src.extractor import (
+    extract_contacts,
+    normalize_url,
+    prioritize_links,
+    same_domain,
+)
 
 
 def validate_public_host(url: str) -> None:
@@ -65,7 +69,6 @@ async def main():
         start_urls = actor_input.get("startUrls") or []
 
         Actor.log.info("Number of start URLs: %s", len(start_urls))
-        start_urls = actor_input.get("startUrls") or []
         max_pages = max(1, min(int(actor_input.get("maxPages", 10)), 30))
         timeout = max(5, min(int(actor_input.get("requestTimeoutSecs", 20)), 60))
         respect_robots = actor_input.get("respectRobotsTxt", True)
@@ -117,15 +120,15 @@ async def main():
                 queue = [start_url]
                 visited = set()
                 aggregate = {"emails": set(), "phones": set(), "socialLinks": set()}
-                scraped_text_parts = []
+
                 pages_done = 0
+                enrichment_data = None
 
                 while queue and pages_done < max_pages:
                     page_url = queue.pop(0)
                     if page_url in visited:
                         continue
                     visited.add(page_url)
-                    Actor.log.info("Checking robots.txt for: %s", page_url)
                     if respect_robots:
                         allowed = await robots_allowed(client, page_url, user_agent, robots_cache)
                         Actor.log.info("Robots decision for %s: %s", page_url, allowed)
@@ -133,43 +136,69 @@ async def main():
                         if not allowed:
                             Actor.log.info("Blocked by robots.txt; skipping %s", page_url)
                             continue
-
                     try:
                         request_url = page_url
+                        redirect_blocked = False
+
                         for _redirect in range(6):
                             validate_public_host(request_url)
                             response = await client.get(request_url)
+
                             if response.status_code not in (301, 302, 303, 307, 308):
                                 break
+
                             location = response.headers.get("location")
                             if not location:
                                 break
-                            request_url = normalize_url(urljoin(request_url, location))
+
+                            redirect_url = normalize_url(urljoin(request_url, location))
+
+                            if not same_domain(redirect_url, base_host):
+                                Actor.log.warning(
+                                    "External redirect blocked: %s -> %s",
+                                    request_url,
+                                    redirect_url,
+                                )
+
+                                await Actor.push_data({
+                                    "startUrl": start_url,
+                                    "pageUrl": page_url,
+                                    "statusCode": response.status_code,
+                                    "error": "External redirect blocked",
+                                    "redirectUrl": redirect_url,
+                                    "emails": [],
+                                    "phones": [],
+                                    "socialLinks": [],
+                                })
+
+                                redirect_blocked = True
+                                break
+
+                            request_url = redirect_url
                         else:
                             raise httpx.TooManyRedirects("Too many redirects")
+
+                        if redirect_blocked:
+                            continue
+
                         content_type = response.headers.get("content-type", "").lower()
+
                         if response.status_code >= 400:
                             await Actor.push_data({
-                                "startUrl": start_url, "pageUrl": page_url,
-                                "statusCode": response.status_code, "error": "HTTP error",
-                                "emails": [], "phones": [], "socialLinks": []
+                                "startUrl": start_url,
+                                "pageUrl": page_url,
+                                "statusCode": response.status_code,
+                                "error": "HTTP error",
+                                "emails": [],
+                                "phones": [],
+                                "socialLinks": [],
                             })
                             continue
+
                         if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
                             continue
 
                         result = extract_contacts(response.text, str(response.url))
-
-                        # Collect limited textual evidence for optional AI enrichment.
-                        soup = BeautifulSoup(response.text, "html.parser")
-
-                        for element in soup(["script", "style", "noscript", "svg"]):
-                            element.decompose()
-
-                        page_text = soup.get_text(" ", strip=True)
-
-                        if page_text:
-                            scraped_text_parts.append(page_text[:8000])
 
                         pages_done += 1
                         for key in aggregate:
@@ -185,7 +214,6 @@ async def main():
                             "socialLinks": result["socialLinks"],
                             "error": None
                         })
-
                         for link in prioritize_links(result["internalLinks"], str(response.url), base_host):
                             if link not in visited and link not in queue:
                                 queue.append(link)
@@ -199,7 +227,6 @@ async def main():
 
                     # Be polite: low request rate, sequential crawling.
                     await asyncio.sleep(0.5)
-                    enrichment_data = None
 
                 if enable_enrichment:
                     try:
@@ -213,7 +240,7 @@ async def main():
 
                         enrichment_data = enricher.enrich(
                             EnrichmentRequest(
-                                scraped_text="\n".join(scraped_text_parts)[:20000],
+                                website_url=start_url,
                                 extracted_emails=sorted(aggregate["emails"]),
                             )
                         )
