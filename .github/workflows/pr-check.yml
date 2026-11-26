@@ -15,7 +15,7 @@ jobs:
   tests-and-security:
     name: Tests and Security
     runs-on: ubuntu-latest
-
+    #uses the latest version of the actions/checkout action to check out the repository
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
