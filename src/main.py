@@ -27,14 +27,18 @@ def validate_public_host(url: str) -> None:
     try:
         ip = ipaddress.ip_address(host)
         if not ip.is_global:
-            raise ValueError("Private, loopback or non-public IP addresses are not allowed")
+            raise ValueError(
+                "Private, loopback or non-public IP addresses are not allowed"
+            )
         return
     except ValueError as exc:
         if "not allowed" in str(exc):
             raise
     try:
         addresses = {item[4][0] for item in socket.getaddrinfo(host, None)}
-        if not addresses or any(not ipaddress.ip_address(addr).is_global for addr in addresses):
+        if not addresses or any(
+            not ipaddress.ip_address(addr).is_global for addr in addresses
+        ):
             raise ValueError("Hostname resolves to a non-public IP address")
     except socket.gaierror as exc:
         raise ValueError(f"Could not resolve hostname: {host}") from exc
@@ -78,21 +82,26 @@ async def main():
         llm_model = actor_input.get("llmModel", "")
         llm_timeout = actor_input.get("llmTimeoutSecs", 60)
         user_agent = actor_input.get(
-            "userAgent",
-            "WebsiteContactExtractor/1.0 (+https://apify.com)"
+            "userAgent", "WebsiteContactExtractor/1.0 (+https://apify.com)"
         )
 
         if not start_urls:
             raise ValueError("Input must contain at least one startUrls entry.")
 
-        headers = {"User-Agent": user_agent, "Accept": "text/html,application/xhtml+xml"}
+        headers = {
+            "User-Agent": user_agent,
+            "Accept": "text/html,application/xhtml+xml",
+        }
         limits = httpx.Limits(max_connections=5, max_keepalive_connections=2)
         robots_cache = {}
         summary = {}
 
         async with httpx.AsyncClient(
-            headers=headers, timeout=timeout, follow_redirects=False,
-            max_redirects=5, limits=limits
+            headers=headers,
+            timeout=timeout,
+            follow_redirects=False,
+            max_redirects=5,
+            limits=limits,
         ) as client:
             for entry in start_urls:
                 raw_url = entry.get("url") if isinstance(entry, dict) else str(entry)
@@ -129,19 +138,42 @@ async def main():
                     if page_url in visited:
                         continue
                     visited.add(page_url)
+                    try:
+                        validate_public_host(page_url)
+                    except ValueError as exc:
+                        Actor.log.warning(
+                            "Skipping unsafe queued URL %s: %s",
+                            page_url,
+                            exc,
+                        )
+                        continue
                     if respect_robots:
-                        allowed = await robots_allowed(client, page_url, user_agent, robots_cache)
+                        allowed = await robots_allowed(
+                            client, page_url, user_agent, robots_cache
+                        )
                         Actor.log.info("Robots decision for %s: %s", page_url, allowed)
 
                         if not allowed:
-                            Actor.log.info("Blocked by robots.txt; skipping %s", page_url)
+                            Actor.log.info(
+                                "Blocked by robots.txt; skipping %s", page_url
+                            )
                             continue
                     try:
                         request_url = page_url
                         redirect_blocked = False
+                        redirect_skipped = False
 
                         for _redirect in range(6):
-                            validate_public_host(request_url)
+                            try:
+                                validate_public_host(request_url)
+                            except ValueError as exc:
+                                Actor.log.warning(
+                                    "Unsafe request URL blocked: %s: %s",
+                                    request_url,
+                                    exc,
+                                )
+                                redirect_skipped = True
+                                break
                             response = await client.get(request_url)
 
                             if response.status_code not in (301, 302, 303, 307, 308):
@@ -160,42 +192,78 @@ async def main():
                                     redirect_url,
                                 )
 
-                                await Actor.push_data({
-                                    "startUrl": start_url,
-                                    "pageUrl": page_url,
-                                    "statusCode": response.status_code,
-                                    "error": "External redirect blocked",
-                                    "redirectUrl": redirect_url,
-                                    "emails": [],
-                                    "phones": [],
-                                    "socialLinks": [],
-                                })
+                                await Actor.push_data(
+                                    {
+                                        "startUrl": start_url,
+                                        "pageUrl": page_url,
+                                        "statusCode": response.status_code,
+                                        "error": "External redirect blocked",
+                                        "redirectUrl": redirect_url,
+                                        "emails": [],
+                                        "phones": [],
+                                        "socialLinks": [],
+                                    }
+                                )
 
                                 redirect_blocked = True
                                 break
+                            try:
+                                validate_public_host(redirect_url)
+                            except ValueError as exc:
+                                Actor.log.warning(
+                                    "Unsafe redirect blocked: %s -> %s: %s",
+                                    request_url,
+                                    redirect_url,
+                                    exc,
+                                )
+                                redirect_skipped = True
+                                break
+
+                            if respect_robots:
+                                allowed = await robots_allowed(
+                                    client, redirect_url, user_agent, robots_cache
+                                )
+                                Actor.log.info(
+                                    "Robots decision for redirect destination %s: %s",
+                                    redirect_url,
+                                    allowed,
+                                )
+
+                                if not allowed:
+                                    Actor.log.info(
+                                        "Redirect destination blocked by robots.txt; skipping %s",
+                                        redirect_url,
+                                    )
+                                    redirect_skipped = True
+                                    break
 
                             request_url = redirect_url
                         else:
                             raise httpx.TooManyRedirects("Too many redirects")
 
-                        if redirect_blocked:
+                        if redirect_blocked or redirect_skipped:
                             continue
 
                         content_type = response.headers.get("content-type", "").lower()
 
                         if response.status_code >= 400:
-                            await Actor.push_data({
-                                "startUrl": start_url,
-                                "pageUrl": page_url,
-                                "statusCode": response.status_code,
-                                "error": "HTTP error",
-                                "emails": [],
-                                "phones": [],
-                                "socialLinks": [],
-                            })
+                            await Actor.push_data(
+                                {
+                                    "startUrl": start_url,
+                                    "pageUrl": page_url,
+                                    "statusCode": response.status_code,
+                                    "error": "HTTP error",
+                                    "emails": [],
+                                    "phones": [],
+                                    "socialLinks": [],
+                                }
+                            )
                             continue
 
-                        if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+                        if (
+                            "text/html" not in content_type
+                            and "application/xhtml+xml" not in content_type
+                        ):
                             continue
 
                         result = extract_contacts(response.text, str(response.url))
@@ -204,26 +272,36 @@ async def main():
                         for key in aggregate:
                             aggregate[key].update(result[key])
 
-                        await Actor.push_data({
-                            "startUrl": start_url,
-                            "pageUrl": str(response.url),
-                            "statusCode": response.status_code,
-                            "title": result["title"],
-                            "emails": result["emails"],
-                            "phones": result["phones"],
-                            "socialLinks": result["socialLinks"],
-                            "error": None
-                        })
-                        for link in prioritize_links(result["internalLinks"], str(response.url), base_host):
+                        await Actor.push_data(
+                            {
+                                "startUrl": start_url,
+                                "pageUrl": str(response.url),
+                                "statusCode": response.status_code,
+                                "title": result["title"],
+                                "emails": result["emails"],
+                                "phones": result["phones"],
+                                "socialLinks": result["socialLinks"],
+                                "error": None,
+                            }
+                        )
+                        for link in prioritize_links(
+                            result["internalLinks"], str(response.url), base_host
+                        ):
                             if link not in visited and link not in queue:
                                 queue.append(link)
                     except httpx.HTTPError as exc:
                         Actor.log.warning("Request failed for %s: %s", page_url, exc)
-                        await Actor.push_data({
-                            "startUrl": start_url, "pageUrl": page_url,
-                            "statusCode": None, "error": str(exc)[:300],
-                            "emails": [], "phones": [], "socialLinks": []
-                        })
+                        await Actor.push_data(
+                            {
+                                "startUrl": start_url,
+                                "pageUrl": page_url,
+                                "statusCode": None,
+                                "error": str(exc)[:300],
+                                "emails": [],
+                                "phones": [],
+                                "socialLinks": [],
+                            }
+                        )
 
                     # Be polite: low request rate, sequential crawling.
                     await asyncio.sleep(0.5)
@@ -264,10 +342,7 @@ async def main():
                         enrichment_data.__dict__ if enrichment_data else None
                     )
 
-        await Actor.push_data({
-            "recordType": "summary",
-            "results": summary
-        })
+        await Actor.push_data({"recordType": "summary", "results": summary})
 
 
 if __name__ == "__main__":
