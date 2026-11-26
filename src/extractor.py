@@ -1,5 +1,6 @@
 import re
 from urllib.parse import urljoin, urlparse, urldefrag
+from tldextract import TLDExtract
 
 import phonenumbers
 from bs4 import BeautifulSoup
@@ -30,11 +31,25 @@ def normalize_url(url: str) -> str:
     return url
 
 
+
+
+_domain_extractor = TLDExtract(suffix_list_urls=())
+
 def same_domain(url: str, base_host: str) -> bool:
     host = (urlparse(url).hostname or "").lower()
     base_host = base_host.lower()
-    return host == base_host or host.endswith("." + base_host) or base_host.endswith("." + host)
 
+    if not host or not base_host:
+        return False
+
+    extracted_host = _domain_extractor(host)
+    extracted_base = _domain_extractor(base_host)
+
+    return (
+        extracted_host.domain == extracted_base.domain
+        and extracted_host.suffix == extracted_base.suffix
+        and bool(extracted_host.suffix)
+    )
 
 def extract_contacts(html: str, page_url: str):
     soup = BeautifulSoup(html, "html.parser")

@@ -31,20 +31,9 @@ def test_api_provider_sends_config_and_parses_response(monkeypatch):
                 "message": {
                     "content": json.dumps(
                         {
-                            "businessName": "Example Company",
-                            "description": "Example Company provides consulting.",
-                            "industry": None,
-                            "services": ["consulting"],
                             "contactRoles": [
                                 {"email": "info@example.com", "role": "general"}
-                            ],
-                            "evidence": {
-                                "businessName": "Example Company",
-                                "description": "Example Company provides consulting.",
-                                "industry": None,
-                                "services": ["consulting"],
-                                "contactRoles": {},
-                            },
+                            ]
                         }
                     )
                 }
@@ -80,7 +69,7 @@ def test_api_provider_sends_config_and_parses_response(monkeypatch):
     )
 
     request = EnrichmentRequest(
-        scraped_text="Example Company provides consulting.",
+        website_url="https://example.com",
         extracted_emails=["info@example.com"],
     )
 
@@ -93,12 +82,12 @@ def test_api_provider_sends_config_and_parses_response(monkeypatch):
     assert captured["payload"]["temperature"] == 0
     assert captured["payload"]["response_format"] == {"type": "json_object"}
 
-    assert result.business_name == "Example Company"
-    assert result.services == ["consulting"]
     assert result.contact_roles == [
         {"email": "info@example.com", "role": "general"}
     ]
-    assert result.evidence["businessName"] == "Example Company"
+    assert result.business_name is None
+    assert result.services == []
+    assert result.evidence == {}
 
 
 def test_api_provider_works_without_api_key(monkeypatch):
@@ -110,12 +99,7 @@ def test_api_provider_works_without_api_key(monkeypatch):
                 "message": {
                     "content": json.dumps(
                         {
-                            "businessName": None,
-                            "description": None,
-                            "industry": None,
-                            "services": [],
                             "contactRoles": [],
-                            "evidence": {},
                         }
                     )
                 }
@@ -144,7 +128,7 @@ def test_api_provider_works_without_api_key(monkeypatch):
 
     provider.enrich(
         EnrichmentRequest(
-            scraped_text="No business information",
+            website_url="https://example.com",
             extracted_emails=[],
         )
     )
@@ -177,7 +161,7 @@ def test_api_provider_rejects_redirects(monkeypatch):
     )
 
     request = EnrichmentRequest(
-        scraped_text="Example evidence",
+        website_url="https://example.com",
         extracted_emails=[],
     )
 
