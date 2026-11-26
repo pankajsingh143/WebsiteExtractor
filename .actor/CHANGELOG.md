@@ -1,7 +1,8 @@
-# Website Contact & Business Information Extractor — v0.2
+# Website Contact & Business Information Extractor — v1.0
 
-**Release date:** 26 November 2026  
-**Release type:** Feature release
+**Release date:** 26 November 2026
+**Build tag:** version-1-0
+**Release type:** Major product release
 
 ## What's New
 
